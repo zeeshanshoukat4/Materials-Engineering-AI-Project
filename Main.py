@@ -1,24 +1,21 @@
-# main.py
-
 import streamlit as st
 from agents import Agent, AsyncOpenAI, OpenAIChatCompletionsModel, RunConfig, Runner
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 import os
-import asyncio
 import nest_asyncio
 
-# Step 1: Allow nested async loops (for Streamlit compatibility)
+# Allow nested loops for Streamlit compatibility
 nest_asyncio.apply()
 
-# Step 2: Load the Gemini API key
-load_dotenv()
+# Load API key
+load_dotenv(find_dotenv())
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 
 if not gemini_api_key:
-    st.error("❌ GEMINI_API_KEY not found. Please add it in the .env file.")
+    st.error("❌ GEMINI_API_KEY not found in .env file.")
     st.stop()
 
-# Step 3: Setup Gemini client
+# Setup Gemini client
 external_client = AsyncOpenAI(
     api_key=gemini_api_key,
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -35,32 +32,58 @@ Config = RunConfig(
     tracing_disabled=True
 )
 
+# Agent definition
 Materials_Engineering = Agent(
     name='Materials Engineering Agent',
-    instructions='You are a Materials Engineering Agent, your job is to provide all information (in depth) about any material in the world w.r.t materials & metallurgical engineering.'
+    instructions='You are a Materials Engineering Agent. Provide in-depth engineering information about any material, including properties, applications, limitations, and comparisons.'
 )
 
-# Step 4: Streamlit frontend
+# Streamlit UI setup
 st.set_page_config(page_title="Materials Engineering Agent", page_icon="🧪")
 st.title("🔍 Materials Engineering Agent")
-st.markdown("Enter a material name to get detailed metallurgical and engineering information.")
+st.markdown("Enter a material name to get detailed metallurgical and engineering information with optional TXT report download.")
 
-with st.form("material_form"):
-    material_name_info = st.text_input("Enter Material Name (e.g., Steel, PVC, Copper):")
-    submit = st.form_submit_button("Get Info")
+material = st.text_input("Enter Material Name (e.g., Steel, PVC, Titanium):")
+submit = st.button("Get Material Info")
 
-if submit and material_name_info:
-    with st.spinner("Fetching data from Gemini API..."):
+# On submit
+if submit and material:
+    with st.spinner("🔄 Fetching material data from Gemini..."):
         try:
+            prompt = (
+                f"Provide a comprehensive report on the material '{material}'. "
+                "Include:\n"
+                "- Physical and chemical properties in table form\n"
+                "- Mechanical properties in table form\n"
+                "- Thermal and electrical behavior in table form \n"
+                "- Engineering and industrial applications in table form\n"
+                "- Cost, availability, limitations\n"
+                "- Common substitutes or alternatives"
+            )
+
             response = Runner.run_sync(
                 Materials_Engineering,
-                input=f"Enter name of material or related materials you want to get info: {material_name_info}",
+                input=prompt,
                 run_config=Config
             )
-            st.success("✅ Information retrieved successfully!")
-            
-           
-            st.markdown("### 📘 Detailed Information:")
-            st.write(response.final_output)
+
+            final_output = response.final_output
+
+            # Display on screen
+            st.success("✅ Material information retrieved!")
+            st.markdown("### 📘 Detailed Engineering Info:")
+            st.write(final_output)
+
+            # Generate .txt file content
+            txt_content = f"Material: {material}\n\n{final_output}"
+            txt_file_name = f"{material.replace(' ', '_')}_Engineering_Report.txt"
+
+            st.download_button(
+                label="📥 Download TXT Report",
+                data=txt_content,
+                file_name=txt_file_name,
+                mime="text/plain"
+            )
+
         except Exception as e:
             st.error(f"❌ Error: {e}")
